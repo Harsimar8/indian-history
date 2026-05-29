@@ -4,13 +4,16 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
+
 app = Flask(__name__)
+
 # ==========================================
 # CONFIGURATION
 # ==========================================
 FAISS_INDEX_PATH = "faiss_index" 
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 PDF_FILE_PATH = "indian-history.pdf" 
+
 # ==========================================
 # INITIALIZE RAG (Using FAISS)
 # ==========================================
@@ -34,9 +37,11 @@ try:
 except Exception as e:
     print(f"Error loading PDF: {e}")
     vector_db = None
+
 @app.route('/')
 def home():
     return render_template('index.html')
+
 @app.route('/ask', methods=['POST'])
 def ask():
     user_query = request.json.get("message")
@@ -49,6 +54,7 @@ def ask():
     
     if not docs:
         return jsonify({"answer": "No relevant information found in the PDF."})
+
     # Instead of calling an AI, we just combine the results from the PDF
     context = "\n\n".join([doc.page_content for doc in docs])
     
@@ -56,5 +62,7 @@ def ask():
     answer = f"According to the document:\n\n{context}"
     
     return jsonify({"answer": answer})
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+
