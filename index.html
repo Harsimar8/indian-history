@@ -174,6 +174,13 @@
     Left Sidebar: The RAG Evidence
     <div class="sidebar">
         <h2>📜 Source Docs</h2>
+        <div id="upload-panel" style="margin-bottom: 20px;">
+            <form id="upload-form" onsubmit="event.preventDefault(); uploadPdf();">
+                <input type="file" id="pdf-file" name="pdf" accept="application/pdf" style="width:100%; padding: 10px; border-radius: 8px; border:1px solid #cbd5e1; margin-bottom:10px;" />
+                <button type="button" onclick="uploadPdf()">Upload PDF</button>
+            </form>
+            <p id="upload-status" style="font-size:0.88rem; color:#334155; margin-top: 12px;">Upload a PDF to activate the knowledge base.</p>
+        </div>
         <div id="reference-box">
             <p style="color:#94a3b8; text-align:center; font-size: 0.85rem;">The AI's evidence from the PDF will appear here.</p>
         </div>
@@ -182,7 +189,7 @@
     <div class="main-chat">
         <div class="header">
             <span>🏛️ Indian History AI</span>
-            <span class="status-badge">RAG ACTIVE</span>
+            <span class="status-badge" id="app-status">NOT READY</span>
         </div>
         
         <div id="chat-box">
@@ -194,47 +201,101 @@
         </div>
     </div>
     <script>
+        let vectorReady = false;
+
         function handleKeyPress(e) {
             if (e.key === 'Enter') sendMessage();
         }
+
+        function setAppStatus(text, active = false) {
+            const badge = document.getElementById('app-status');
+            badge.textContent = text;
+            badge.style.background = active ? '#d4af37' : '#cbd5e1';
+            badge.style.color = active ? '#1e3a8a' : '#475569';
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                vectorReady = data.ready;
+                setAppStatus(data.ready ? 'READY' : 'NOT READY', data.ready);
+                document.getElementById('upload-status').textContent = data.message;
+            } catch (error) {
+                document.getElementById('upload-status').textContent = 'Could not get status from the server.';
+            }
+        }
+
+        async function uploadPdf() {
+            const fileInput = document.getElementById('pdf-file');
+            const statusText = document.getElementById('upload-status');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                statusText.textContent = 'Please select a PDF file first.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('pdf', file);
+            statusText.textContent = 'Uploading PDF...';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    statusText.textContent = data.message;
+                    vectorReady = true;
+                    setAppStatus('READY', true);
+                    document.getElementById('chat-box').innerHTML += `<div class="msg bot">PDF uploaded successfully. You can now ask questions.</div>`;
+                } else {
+                    statusText.textContent = data.error || 'Upload failed.';
+                }
+            } catch (error) {
+                statusText.textContent = 'Upload failed. Check your connection and backend.';
+            }
+        }
+
         async function sendMessage() {
             const input = document.getElementById('user-input');
             const chatBox = document.getElementById('chat-box');
             const refBox = document.getElementById('reference-box');
-            
-            if(!input.value.trim()) return;
+
+            if (!input.value.trim()) return;
+            if (!vectorReady) {
+                chatBox.innerHTML += `<div class="msg bot" style="color:red;">Please upload a PDF first.</div>`;
+                return;
+            }
+
             const userText = input.value;
-            
-            // 1. Add User Message
             chatBox.innerHTML += `<div class="msg user">${userText}</div>`;
             input.value = '';
             chatBox.scrollTop = chatBox.scrollHeight;
+
             try {
-                // 2. Call Flask Backend /ask endpoint
                 const response = await fetch('/ask', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({message: userText})
                 });
-                
                 const data = await response.json();
-                if(data.answer) {
-                    // 3. Add Bot Response
+                if (data.answer) {
                     chatBox.innerHTML += `<div class="msg bot">${data.answer}</div>`;
-                    
-                    // 4. Update Sidebar with the "RAG Evidence"
-                    // Since your app.py returns "According to the document...", 
-                    // we display that raw text in the sidebar as the source.
-                    refBox.innerHTML = `<div class="ref-card"><strong>Document Match:</strong><br>${data.answer}</div>`;
+                    refBox.innerHTML = `<div class="ref-card"><strong>Document Match:</strong><br>${data.answer.replace(/\n/g, '<br>')}</div>`;
                 } else {
                     chatBox.innerHTML += `<div class="msg bot" style="color:red;">Error: No answer returned.</div>`;
                 }
             } catch (error) {
                 chatBox.innerHTML += `<div class="msg bot" style="color:red;">Connection failed. Please ensure app.py is running.</div>`;
             }
-            
+
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
+        updateStatus();
     </script>
 </body>
 </html>             
